@@ -48,6 +48,12 @@ void ble_set_pins(uint8_t reqn, uint8_t rdyn);
 unsigned char ble_busy();
 void ble_reset(uint8_t reset_pin);
 void ble_disconnect(void);
+#if defined(BLEND) || defined(BLEND_MICRO)
+void ble_low_power(void);
+boolean ble_can_sleep(void);
+boolean ble_sleep(void);
+boolean ble_wakeup(void);
+#endif
 
 #endif
 

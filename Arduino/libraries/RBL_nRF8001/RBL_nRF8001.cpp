@@ -15,6 +15,10 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 #include "RBL_nRF8001.h"
 
+// See guide from http://redbearlab.com/blend-low-power-settings/
+static unsigned char is_LowPower = 0;
+static boolean can_sleep = false;
+
 #ifdef SERVICES_PIPE_TYPE_MAPPING_CONTENT
     static services_pipe_type_mapping_t
         services_pipe_type_mapping[NUMBER_OF_PIPES] = SERVICES_PIPE_TYPE_MAPPING_CONTENT;
@@ -39,7 +43,7 @@ static char device_name[11] = "BLE Shield";
 #endif
 
 static uint16_t Adv_Timeout = 0;	// Advertising all the time
-static uint16_t Adv_Interval = 0x0050; /* advertising interval 50ms
+static uint16_t Adv_Interval = 0x0100; // advertising interval 1000ms
 
 /*aci_struct that will contain :
 total initial credits
@@ -104,6 +108,30 @@ void ble_set_pins(uint8_t reqn, uint8_t rdyn)
 #endif
 }
 
+// See guide from http://redbearlab.com/blend-low-power-settings/
+#if defined(BLEND) || defined(BLEND_MICRO)
+void ble_low_power(void)
+{
+    is_LowPower = 1;
+}
+
+boolean ble_can_sleep(void)
+{
+    return can_sleep;
+}
+
+boolean ble_sleep(void)
+{
+	lib_aci_radio_reset();
+    return lib_aci_sleep();
+}
+
+boolean ble_wakeup(void)
+{
+    return lib_aci_wakeup();
+}
+#endif
+
 void ble_begin()
 {
 #if ( !defined(__SAM3X8E__) && !defined(__PIC32MX__) )
@@ -143,11 +171,19 @@ void ble_begin()
     aci_state.aci_pins.spi_clock_divider     = SPI_CLOCK_DIV8;
 #endif
 
-    aci_state.aci_pins.reset_pin             = UNUSED;
+    aci_state.aci_pins.reset_pin             = 4;
     aci_state.aci_pins.active_pin            = UNUSED;
     aci_state.aci_pins.optional_chip_sel_pin = UNUSED;
 
-    aci_state.aci_pins.interface_is_interrupt	  = false;
+    if(is_LowPower)
+	{
+		aci_state.aci_pins.interface_is_interrupt     = true;
+	}
+	else
+	{
+		aci_state.aci_pins.interface_is_interrupt     = false;
+	}
+	
     aci_state.aci_pins.interrupt_number			  = 4;//1;
 
     //We reset the nRF8001 here by toggling the RESET line connected to the nRF8001
@@ -249,6 +285,9 @@ void ble_disconnect(void)
 static void process_events()
 {
     static bool setup_required = false;
+	
+	can_sleep = false;
+	
     // We enter the if statement only when there is a ACI event available to be processed
     if (lib_aci_event_get(&aci_state, &aci_data))
     {
@@ -402,6 +441,9 @@ static void process_events()
         //Serial.println(F("No ACI Events available"));
         // No event in the ACI Event queue and if there is no event in the ACI command queue the arduino can go to sleep
         // Arduino can go to sleep now
+		#if defined(BLEND) || defined(BLEND_MICRO)
+			can_sleep = true;
+		#endif
         // Wakeup from sleep from the RDYN line
     }
     /* setup_required is set to true when the device starts up and enters setup mode.
@@ -478,4 +520,5 @@ void ble_do_events()
     SPCR = spi_old;
 #endif
 }
+
 

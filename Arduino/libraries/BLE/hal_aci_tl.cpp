@@ -84,6 +84,12 @@ static void m_aci_isr(void)
   hal_aci_data_t data_to_send;
   hal_aci_data_t received_data;
 
+  // see guide from http://redbearlab.com/blend-low-power-settings/
+#if defined(__AVR_ATmega32U4__)
+    PRR0 = 0x00;  // Power Reduction Register: open timer
+    PRR1 = 0x00;
+#endif  
+  
   // Receive from queue
   if (!aci_queue_dequeue_from_isr(&aci_tx_q, &data_to_send))
   {
