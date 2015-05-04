@@ -44,10 +44,10 @@
   {ACI_STORE_LOCAL, ACI_SET},   \
 }
 
-#define GAP_PPCP_MAX_CONN_INT 0x12 /**< Maximum connection interval as a multiple of 1.25 msec , 0xFFFF means no specific value requested */
-#define GAP_PPCP_MIN_CONN_INT  0x6 /**< Minimum connection interval as a multiple of 1.25 msec , 0xFFFF means no specific value requested */
+#define GAP_PPCP_MAX_CONN_INT 0x6 /**< Maximum connection interval as a multiple of 1.25 msec , 0xFFFF means no specific value requested */
+#define GAP_PPCP_MIN_CONN_INT  0x3 /**< Minimum connection interval as a multiple of 1.25 msec , 0xFFFF means no specific value requested */
 #define GAP_PPCP_SLAVE_LATENCY 0
-#define GAP_PPCP_CONN_TIMEOUT 0xa /** Connection Supervision timeout multiplier as a multiple of 10msec, 0xFFFF means no specific value requested */
+#define GAP_PPCP_CONN_TIMEOUT 0x1a /** Connection Supervision timeout multiplier as a multiple of 10msec, 0xFFFF means no specific value requested */
 
 #define NB_SETUP_MESSAGES 23
 #define SETUP_MESSAGES_CONTENT {\
