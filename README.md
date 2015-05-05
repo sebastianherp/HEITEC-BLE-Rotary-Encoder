@@ -23,14 +23,16 @@ Author: Sebastian Herp
 
 ## Power saving strategy:
 
-Since the Blend Micro always draws a minimum of 1.7-2.0 mA ( http://redbearlab.com/blend-low-power-settings/ ) a external latching power switch is used. It is activated
-by USB power, button press and the Arduino Pin D5 being HIGH.
+Since the Blend Micro always draws a minimum of 1.7-2.0 mA ( http://redbearlab.com/blend-low-power-settings/ ) a external
+latching power switch is used. It is activated by USB power, button press and the Arduino Pin D5 being HIGH.
 
-The Blend Micro deactivates itself after a long button press or the battery running below a certain voltage for some time while not connected. It also deactivates below
-~3.1 V because the gate voltage on the NPN transistor will be to low.
+The Blend Micro deactivates itself after a long button press or the battery running below a certain voltage (default 3.4 V)
+for some time (200 s) while not connected. It also deactivates below ~3.1 V because the gate voltage on the NPN transistor
+will be to low.
 
-While running power is saved by sleeping during periods of low activity. The Arduino wont sleep when connected to USB power, a LED is on (PWM, not full brightness) and
-certain other conditions to make sure debounce, etc works. The LEDs will turn off after a configurable amount of time to save power.
+While running power is saved by sleeping during periods of low activity. The Arduino wont sleep when connected to USB power,
+a LED is on (PWM, not full brightness) and certain other conditions to make sure debounce, etc works. The LEDs will turn off
+after a configurable amount of time (default 30 s) to save power.
 
 ## Power usage:
 
