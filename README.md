@@ -46,3 +46,24 @@ certain other conditions to make sure debounce, etc works. The LEDs will turn of
     - green = FF: 6.3 mA
     - both  = FF: 14.7 mA
 
+## Development
+
+### PC/Mac/Linux
+ - Install Arduino 1.6.3+
+ - Change the Skechtbook location to the Arduino directory of this repository
+ - Done
+ 
+### Raspberry Pi
+ - Copy Raspbian Wheezy (2015-02-16) on a SD card (use Win32DiskImager on Windows)
+ - Follow the instructions [here](http://www.elinux.org/RPi_Bluetooth_LE) to install Bluez 5.30 on Raspberry Pi
+ - `gatttool`, `hciconfig` and `hcitool` should now be available on the command line
+
+## References
+
+ - http://redbearlab.com/blendmicro/
+ - http://redbearlab.com/getting-started-blendmicro/
+ - http://redbearlab.com/blend-low-power-settings/
+ - http://www.arduino.cc/en/uploads/Main/arduino-leonardo-schematic_3b.pdf
+ - https://github.com/RedBearLab/Blend/
+ - https://github.com/RedBearLab/nRF8001
+ - https://github.com/NordicSemiconductor/ble-sdk-arduino
