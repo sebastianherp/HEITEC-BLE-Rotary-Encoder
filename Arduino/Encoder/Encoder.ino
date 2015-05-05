@@ -1,6 +1,50 @@
 /*******************************************************************
 Bluetooth LE Pushbutton mit Drehencoder und integrierter roter und grüner LED.
 
+Datum: 5. Mai 2015
+Autor: Sebastian Herp
+
+Usage on Linux/Raspberry Pi (Bluez 5.30):
+==============================
+1) "hciconfig" => if it shows the interface to be down execute "sudo hciconfig hci0 up"
+2) "sudo hcitool lescan" to scan for BLE devices
+3) "gatttool -t random -b F0:0E:BD:D9:5B:3D --interactive" to start gatttool
+4a) "connect" => command line should change to blue and you should be connected to the Blend Micro with the address F0:0E:BD:D9:5B:3D
+4b) "char-write-req 0x0011 0100" asks for notifications opening the return channel (status messages, encoder position and button presses are received here)
+5a) "char-write-cmd 0x000e 00" asks for a status reply
+5b) "char-write-cmd 0x000e 01ff00" sets the red LED to full brightness (0100ff: green LED full brightness, 018080: both LEDs half brightness, 010000: both LEDs off)
+6) "disconnect" / "exit" to disconnect from device
+
+Replies (hex values):
+========
+Status: "00 00 06 00 00 0d 75 20 00" (encoder pos = 00 06, leds = 00 00, voltage = 0d 75, bat. percentage = 20, running on USB power = 00)
+Encoder movement: "01 00 10 01 5a" (encoder pos = 00 10, speed in deg/s = 01 5a)
+Button: "02 01" (button pressed) and "02 00" (button depressed)
+
+Power saving strategy:
+======================
+Since the Blend Micro always draws a minimum of 1.7-2.0 mA ( http://redbearlab.com/blend-low-power-settings/ ) a external latching power switch is used. It is activated
+by USB power, button press and the Arduino Pin D5 being HIGH.
+
+The Blend Micro deactivates itself after a long button press or the battery running below a certain voltage for some time while not connected. It also deactivates below
+~3.1 V because the gate voltage on the NPN transistor will be to low.
+
+While running power is saved by sleeping during periods of low activity. The Arduino wont sleep when connected to USB power, a LED is on (PWM, not full brightness) and
+certain other conditions to make sure debounce, etc works. The LEDs will turn off after a configurable amount of time to save power.
+
+Power usage:
+============
+Off: 0.0 mA
+Startup: 12-16 mA
+Sleeping: ~2.5 mA (BLE still on in this mode)
+Encoder movement or putton press: ~6.1 mA
+LEDs:
+  red   = FE: 15 mA
+  green = FE: 10 mA
+  both  = FE: 17.4 mA
+  red   = FF: 11.9 mA
+  green = FF: 6.3 mA
+  both  = FF: 14.7 mA
 
 *******************************************************************/
 
@@ -12,13 +56,14 @@ Bluetooth LE Pushbutton mit Drehencoder und integrierter roter und grüner LED.
 #include <avr/wdt.h>
 
 // APPLICATION PARAMETERS
-#define LED_AUTO_OFF 30000                         // in ms (turns off 
-#define PUSHBUTTON_TURNOFF_MILLIS 5000             // in ms
+#define LED_AUTO_OFF 30000                         // in ms (LED turns off after this much time)
+#define PUSHBUTTON_TURNOFF_MILLIS 5000             // in ms (hold the button this long to turn off the Arduino)
 #define INTERVAL_STATUS_MESSAGES 0                 // in ms (0 to stop periodic sending)
-#define INTERVAL_BATTERY_MEASUREMENTS 10000        // in ms
-#define ENCODER_THRESHOLD 7000                     // in µs
-#define PUSHBUTTON_THRESHOLD 250                   // in ms
-#define SERIAL_DEBUG 1
+#define INTERVAL_BATTERY_MEASUREMENTS 10000        // in ms 
+#define LOW_BATTERY_VOLTAGE 3400                   // in mV (if voltage is below this value turn off Arduino when not in use)
+#define ENCODER_THRESHOLD 7000                     // in µs (debounce)
+#define PUSHBUTTON_THRESHOLD 250                   // in ms (debounce)
+#define SERIAL_DEBUG 1                             // the BLE library has a lot of serial output, so commenting this doesn't really turn of UART messages
 
 // PIN CONFIGURATION
 #define PIN_POWER 5
@@ -71,7 +116,7 @@ void increaseWatchdogCounter() {
 }
 
 /***
-
+Setup all used pins
 */
 void setupPins() {
   // Ports
@@ -88,12 +133,15 @@ void setupPins() {
   digitalWrite(PIN_ENCODER_GND, LOW);
 }
 
-// SETUP
+/***
+Setup() is the first routine the Arduino executes
+*/
 void setup() {
   // Make sure we have power
   pinMode(PIN_POWER, INPUT);
   digitalWrite(PIN_POWER, HIGH);
   
+  // Pins
   setupPins();
   
   // For Blend Micro:
@@ -124,7 +172,10 @@ void setup() {
   Serial.begin(115200); // baudrate doesn't matter => virtual usb com port
 #endif
 
-  TXLED1;RXLED1;
+  // turn off internal LEDs
+  TXLED1;
+  RXLED1;	
+  digitalWrite(PIN_LED_ARDUINO, LOW);
   
   // Detect USB connection
   USBCON = USBCON | B00010000;
@@ -173,8 +224,10 @@ void loop() {
   // first sleep / powerdown turns off SPI, UART, I2C, etc ... normal power usage after the first sleep is ~6 mA)
   if(!usbDetected                        // don't sleep if running on USB power
     && ble_can_sleep()                   // only sleep when BLE chip has nothing to do
-    && brightnessRed == 0                // don't sleep if LEDs are on
-    && brightnessGreen == 0
+    && (brightnessRed == 0               // don't sleep if LEDs are PWMd
+       || brightnessRed == 255)                
+    && (brightnessGreen == 0
+       || brightnessGreen == 255)
     && buttonPressed == false            // don't sleep while button is pressed
     && (micros() - encAtime > 2000000)   // encoder debounce 
     && (micros() - encBtime > 2000000)   // encoder debounce
@@ -212,14 +265,14 @@ void measureBattery(boolean force) {
   else
     batteryPercentage = constrain(map(batteryVoltage, 3150, 3400, 0, 25), 0, 25);
   
-  if(batteryPercentage < 25 && !ble_connected()) { // 25% left
+  if(batteryVoltage < LOW_BATTERY_VOLTAGE && !ble_connected()) { // 25% left (3,4V)
     batteryLowCounter++;
   } else {
     batteryLowCounter = 0;
   }
   
-  // 10 times below 3,4 V (25%) and not connected => turn off Arduino to save power
-  if(batteryLowCounter > 10 && !ble_connected()) {
+  // 20 times below 3,4 V (25%) and not connected => turn off Arduino to save power
+  if(batteryLowCounter > 20 && !ble_connected()) {
     turnOff();
   }
   
@@ -230,8 +283,16 @@ void measureBattery(boolean force) {
 
 void updateLEDs(uint8_t newRed, uint8_t newGreen) {
   if(brightnessRed != newRed || brightnessGreen != newGreen) {
-    analogWrite(PIN_LED_RED, newRed);
-    analogWrite(PIN_LED_GREEN, newGreen);
+    if(newRed == 255)
+      digitalWrite(PIN_LED_RED, HIGH);
+    else
+      analogWrite(PIN_LED_RED, newRed);
+      
+    if(newGreen == 255)
+      digitalWrite(PIN_LED_GREEN, HIGH);
+    else
+      analogWrite(PIN_LED_GREEN, newGreen);
+      
     brightnessRed = newRed;
     brightnessGreen = newGreen;
 
@@ -599,19 +660,13 @@ void powerDown() {
   //delay(50);
   power_spi_disable();
   
+  
+  // turn off LEDs
   TXLED1;
   RXLED1;	
   digitalWrite(PIN_LED_ARDUINO, LOW);
-  digitalWrite(PIN_LED_RED, LOW);
-  digitalWrite(PIN_LED_GREEN, LOW);
   
   pinMode(PIN_BATTERY, INPUT_PULLUP);
-  /*
-  pinMode(PIN_ENCODER_A, OUTPUT);
-  pinMode(PIN_ENCODER_B, OUTPUT);
-  digitalWrite(PIN_ENCODER_A, LOW);
-  digitalWrite(PIN_ENCODER_B, LOW);
-  */
 
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
   cli();
